@@ -19,6 +19,8 @@ function createWindow() {
   });
 
   win.loadFile(startPageHtml);
+
+  win.webContents.openDevTools();
 }
 
 // 準備ができたらウィンドウ生成

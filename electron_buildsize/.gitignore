@@ -118,4 +118,7 @@ dist
 .pnp.*
 
 # entry point js
-*.js
+index.js
+preload.js
+
+js

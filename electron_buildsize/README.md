@@ -24,7 +24,7 @@
   - src : release には含めない。
     - index.ts : window script
   - build : clear で削除。release に含める。git には含めない。
-    - vendor.js : webpack で生成。
+    - bundle.js : webpack で生成。
   - index.html : window のソース。release に含める。
   - resource : release に含める。
     - \*.jpg : 画像リソース
@@ -349,3 +349,326 @@
   - <https://qiita.com/riversun/items/7f1679509f38b1ae8adb>
     - `package.json` で直接依存しているパッケージにしか適用できない。
     - 「直接依存しているパッケージが更に深く依存しているパッケージ」には適用できない。
+
+## webpack guid: getting started
+
+- <https://webpack.js.org/guides/getting-started/>
+- Basic Setup
+  - インストール
+    > npm install webpack webpack-cli --save-dev
+  - package.json に private: true を追加
+- Creating a Bundle
+  - ソースは `src` フォルダ
+  - distribution コードは `build` フォルダ
+  - index.html でバンドルされたファイルを読み込む。
+    - この例では `main.js` としている。
+  - `npx webpack` webpack によりビルドされる。
+- Using a Configuration
+  - `webpack.config.js` ファイルにより設定を構成できる。
+  - 詳細は <https://webpack.js.org/configuration/>
+- NPM Scripts
+
+  - `package.json` の `"scripts":{}` にビルドコマンドを登録する
+
+    ```json
+    "scripts": {
+      "build": "webpack",
+    ```
+
+  - `npm run build` とすると webpack のビルドが実行される。
+  - この script 名は electron や typescript などのビルドと混同しないように名前を変える。
+
+## webpack guid: typescript
+
+- このプロジェクトでは typescript を採用している。
+- webpack でトランスパイルする必要がある。
+- webpack guid の typescript を参考にする
+- <https://webpack.js.org/guides/typescript/>
+- Basic Setup
+
+  - `npm install --save-dev typescript ts-loader`
+  - `webpack.config.js` に typescript の設定を加える
+
+    ```javascript
+    module.exports = {
+      entry: './src/index.ts',
+      module: {
+        rules: [
+          {
+            test: /\.tsx?$/,
+            use: 'ts-loader',
+            exclude: /node_modules/,
+          },
+        ],
+      },
+      resolve: {
+        extensions: ['.tsx', '.ts', '.js'],
+      },
+    ```
+
+    - `entry` : js ではなく ts ファイルを指定する
+    - `module` : `rules` を追加する
+    - `rules` : .ts | .tsx を ts-loader で読み込む。 node_modules を除外する。
+    - `resolve` : require などで省略される拡張子に typescript を加える。
+
+- Loader
+  > ts-loader uses tsc, the TypeScript compiler, and relies on your tsconfig.json configuration. Make sure to avoid setting module to "CommonJS", or webpack won't be able to tree-shake your code.
+  - tsconfig.json で `CommonJS` に「しない」。
+
+## webpack で、開発とリリースの設定を切り替える
+
+- https://webpack.js.org/configuration/configuration-types/#exporting-multiple-configurations
+
+  - module.exports で function を返す
+
+    ```javascript
+    module.exports = function (env, argv) {
+      return {
+        mode: env.production ? "production" : "development",
+        devtool: env.production ? "source-map" : "eval",
+      };
+    };
+    ```
+
+  - `webpack` コマンドで mode の指定
+    - `npx webpack --mode production`
+    - `npx webpack --mode development`
+
+- `package.json` の `scripts` に登録する
+
+## webpack による 2 つのビルド
+
+- <https://www.subarunari.com/entry/electronWebpackConfig>
+
+  > Electron は、メインプロセスとレンダラープロセスという 2 種類のプロセスから構成
+  >
+  > メインプロセス
+  > OS レベルの処理を主に取り扱い、アプリケーションのライフサイクルを管理するプロセスです。デスクトップアプリケーションに不可欠な GUI の作成も担当しています。つまり、このメインプロセスがウィンドウを作成しています。ウィンドウの作成だけでなく、最大化/最小化、リサイズ、閉じるといった各種イベントをハンドリングします。アプリケーションメニューやショートカットの定義、アップデート処理などもメインプロセスで取り扱われています。メインプロセスの役割はウィンドウを作るところまでです。
+  >
+  > レンダラープロセス
+  > メインプロセスによって作られたウィンドウは、Web ページとして作られた UI を持ちます。この Web ページを描画しているプロセスが、レンダラープロセスです。ウィンドウが HTML ファイルをロードして Web ページを表示する際に、レンダラープロセスが作成されます。メインプロセスは 1 つしか存在しませんが、レンダラープロセスは Web ページごとに存在します。1 つのウィンドウの中に複数の Webview がある場合、それぞれ対応するレンダラープロセスが存在することになります。
+
+- main プロセス用とレンダラー用の webpack 設定を書く
+- main プロセス用
+  - プロジェクトルートフォルダに main.js として出力する。
+  - 出力ファイルを `package.json` の main に指定する。
+- レンダラープロセス用
+  - プロジェクトルートのサブフォルダに出力する
+  - 出力ファイルは、レンダリング html ファイルごとに分けるか、ある程度纏めるか。
+  - シングルページならば全て 1 つの js に出力する。
+- `webpack.config.js` の `module.exports` には配列で複数の設定を出力できる。
+- これによって index.ts,preload.ts を個別にビルドしなくてもよくなった。
+  - package.json から個別ビルドの script を削除する。
+  - webpack を行うとエラーがでる。
+    > Module not found: Error: Can't resolve 'path' in
+    > Module not found: Error: Can't resolve 'fs'
+  - <https://tech-for.com/2020/03/04/fix-an-error-that-ts2307-cannot-find-module-fs-by-installing-types-node-package/>
+    - path エラーが消えた。
+    - fs エラーは残る。
+  - <https://utamaro.hatenablog.jp/entry/2019/11/24/174339>
+    - main プロセス用の設定に `target: 'electron-main',` を加える。
+    - fs エラーが消えた。
+
+## Electron ウィンドウで webpack を使っていると javascript エラーが出る
+
+```text
+Uncaught EvalError: Refused to evaluate a string as JavaScript because 'unsafe-eval' is not an allowed source of script in the following Content Security Policy directive: "script-src 'self'".
+```
+
+- index.html
+
+  ```html
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'"
+  />
+  <meta
+    http-equiv="X-Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'"
+  />
+  ```
+
+- electron の template を参考にする
+  - <https://www.electronforge.io/templates/typescript-+-webpack-template>
+    > npx create-electron-app my-new-app --template=typescript-webpack
+    - このコマンドで現在のフォルダ以下に新たな electron プロジェクトフォルダが生成される。
+    - typescript と webpack を使用したプロジェクト。
+    - 概ねコレを使用したほうがよい?
+      - index.html に `Content-Security-Policy` が指定されていないのは問題。
+      - `Content-Security-Policy` を指定すると全く同様の状態になる。
+      - devtool: false にすれば発生しないので、template を使用したほうが良い。
+- 問題は `Content-Security-Policy`
+  - <https://golang.hateblo.jp/entry/typescript-webpack-develop-browser-extension>
+    > webpack でトランスパイルしたファイルにソースマップを埋め込むために eval が使われているのでこのエラーが出る。
+  - sourcemap を無効にすれば出ない？
+  - devtool: <https://webpack.js.org/configuration/devtool/>
+    - (none) or false : 生成されないので発生しない？ -> 発生しない。
+    - eval : 当然 eval が使われるのでダメ
+    - inline-xxx : inline で展開するなら eval が使われないので OK?
+
+## renderer.ts の使用
+
+- template で生成されたプロジェクトでは index.html にレンダラープロセス用スクリプトを指定していない。
+- `renderer.ts` ファイルだけが置かれている。
+- `renderer.js` ファイルがあれば自動的にレンダラープロセスで使用される？
+  - どのフォルダにあっても良いのか要確認
+- `renderer.ts` を使用するようにする
+- このプロジェクトでは `renderer.js` は読み込まれない。
+  - よくわからないのでナシ。 index.html に `<script>` として読み込ませる。
+
+## entory point script の移動
+
+- template プロジェクトでは entory point の ts ファイルも src フォルダ内に存在する。
+- `package.json` の `main` で指定してあればどこにあっても良い
+- ts ファイルはすべて `src` フォルダに移動させる。
+- トランスパイル後の js ファイルは、メインプロセス用、レンダラープロセス用、preload 用で別れていれば、どこにあってもよい。
+
+## electron-forge の活用
+
+- <https://www.electronforge.io/templates/typescript-+-webpack-template>
+- このテンプレートで生成した `package.json` を見ると `scripts` で electron-forge を使用してる。
+  > "start": "electron-forge start",
+  > "package": "electron-forge package",
+  > "make": "electron-forge make",
+  > "publish": "electron-forge publish",
+  - production と development の指定が出来るならばこれに切り替える。
+- `npx electron-forge start`
+  - electron を実行する。
+- `npx electron-forge package`
+  - 単に実行可能な electron を `out` フォルダ以下に生成する。
+  - `npx electron-forge make` でインストーラーの生成を除いた挙動
+- `npx electron-forge make`
+  - `npx electron-forge package` に加えてインストールパッケージを生成する。
+- `npx electron-forge publish`
+  - make を行い github などにアップロードする？
+
+## electron-forge 実行時には、webpack, tsc などは行われない
+
+- 単にファイルとしてあるものに対して出力が行われる。
+- 事前に webpack 等を行わなければならない。
+- 解決策
+  - electron-forge の plugin `@electron-forge/plugin-webpack` を使えば同時に行われる？
+    - <https://www.electronforge.io/config/plugins/webpack>
+  - `package.json` で script を組み合わせて webpack の後に electron-forge が実行されるように指定する方法。
+
+## electron の make で実行に不要な開発ファイルまですべて含まれてしまう問題
+
+- 問題: `electron-forge package` を行うと `out/*/resources/app/*` にプロジェクトルートにある開発ファイルが含まれてしまう
+- ~~`package.json` の `files: []` に必要なファイルのみ含めて package を行う~~
+  - 変化なし
+- ~~`package.json` の `build: files: []` に必要なファイルのみ含めて package を行う~~
+  - 変化なし
+- <https://www.electronforge.io/configuration>
+  - `package.json` `config.forge.packageConfig` に electron-packager の設定を書き込む
+  - `ignore` によって指定されたものを除外する。
+    - 指定したファイルのみ含める allow は存在しない。
+    - ほぼすべてのファイルが不要。
+  - 必要なファイル
+    - `package.json`
+    - `index.js` `index.html`
+      - これらから使用されるファイル
+        - `node_modules` フォルダは不要。必要なものがあれば webpack によりバンドルされる為。
+        - ネイティブライブラリなどがある場合は不明。
+
+## electron のフォルダ構成
+
+- <https://www.electron.build/configuration/configuration#configuration>
+- electron-builder の設定項目
+  - `forge.config.js` の `packagerConfig` に指定する。
+  - directories
+    - buildResources
+    - output
+    - app
+
+## electron に出力される package.json の内容を最小限にする
+
+- 必要そうな項目
+  - main
+- 無関係そうな項目
+  - scripts
+  - license
+  - devDependencies
+  - dependencies
+- electron-forge の設定は `package.json` に必須ではない
+- `forge.config.js` に electron-forge の設定を移動させる
+  - `ignore`リストに `forge.config.js` を加える。正常に動作する。
+- <https://www.electron.build/tutorials/loading-app-dependencies-manual>
+- <https://www.electron.build/tutorials/two-package-structure>
+
+  > Two package.json Structure
+  >
+  > 1. For development (./package.json)
+  >    The package.json resides in the root of your project. Here you declare the dependencies for your development environment and build scripts (devDependencies).
+  > 1. For your application (./app/package.json)
+  >    The package.json resides in the app directory. Declare your application dependencies (dependencies) here. Only this directory is distributed with the final,packaged application.
+
+  - まったく動作しない。
+  - `app/package.json` ファイルを生成しても `out/xxx/resources/app/app/package.json` として出力される
+  - `package.json` は `out/xxx/resources/app/package.json` として出力される。
+
+- electron-forge/webpackplugin を使用すると不必要な項目を強制的に除外される。
+
+  - <https://github.com/electron-userland/electron-forge/blob/master/packages/plugin/webpack/src/WebpackPlugin.ts#L209>
+  - この辺のコードで除外している。
+  - `hook` `packageAfterCopy` の時に出力先の package.json を上書きしている。
+
+- `forge.config.js` で `out/xxx/resources/app/package.json` を `app/package.json` に置き換える処理を行う。
+  - 無理
+- `electron-forge/plugin-webpack` を使用する
+
+  - `npm i -D @electron-forge/plugin-webpack ts-loader`
+  - main process 用の webpack.main.config.js の作成
+  - renderer 用の webpack.renderer.config.js の作成
+  - preload 用の webpack.preload.config.js の作成
+  - webpack.rules.js の作成
+  - すべて template を参考に適当に作る。
+  - package を行うと生成される。
+    - package.json では不要な部分が削除されている。
+    - main process 用、 preload 用の js ファイルが生成されなかった。
+    - webpack.config.js で module.exports にはオブジェクトしか指定できない。
+      - 配列、関数は指定できない。= production, development の切り替えが出来ない。
+  - 実行してみると、webpack が裏で動いている。
+
+  ```text
+  > electron_buildsize@1.0.0 start
+
+  > electron-forge start
+
+  ✔ Checking your system
+  ✔ Locating Application
+  ✔ Preparing native dependencies
+  ✔ Compiling Main Process Code
+  ✔ Launch Dev Servers
+  ✔ Compiling Preload Scripts
+  ✔ Launching Application
+
+  Webpack Output Available: http://localhost:9000
+
+  ⠹ Compiling Renderer Code
+  ⠧ Compiling Renderer Codeasset main_window/index.js 359 KiB [emitted] (name: main_window)
+  asset main_window/index.html 774 bytes [emitted]
+  runtime modules 25.1 KiB 10 modules
+  modules by path ./node_modules/ 304 KiB
+  modules by path ./node_modules/webpack-dev-server/client/ 157 KiB 13 modules
+  modules by path ./node_modules/webpack/hot/_.js 4.3 KiB 4 modules
+  modules by path ./node_modules/html-entities/lib/_.js 81.3 KiB 4 modules
+  modules by path ./node_modules/url/ 37.4 KiB 3 modules
+  modules by path ./node_modules/querystring/\*.js 4.51 KiB
+  ./node_modules/querystring/index.js 127 bytes [built] [code generated]
+  ./node_modules/querystring/decode.js 2.34 KiB [built] [code generated]
+  ./node_modules/querystring/encode.js 2.04 KiB [built] [code generated]
+  ./node_modules/ansi-html/index.js 4.16 KiB [built] [code generated]
+  ./node_modules/events/events.js 14.5 KiB [built] [code generated]
+  modules by path ./src/ 1.02 KiB
+  ./src/renderer.ts 885 bytes [built] [code generated]
+  ./src/ sync 160 bytes [built] [code generated]
+
+  WARNING in ./src/renderer.ts 3:24-31
+  Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+  ```
+
+  - これなら事前に webpack で変換を終わらせる plugin を使わない方が良いのでは？
+  - 気にしない、気にならないなら template 使用でよい。
+
+- `package.json`問題は未解決
