@@ -672,3 +672,222 @@ Uncaught EvalError: Refused to evaluate a string as JavaScript because 'unsafe-e
   - 気にしない、気にならないなら template 使用でよい。
 
 - `package.json`問題は未解決
+
+## test の導入
+
+- unit test framework 候補
+  - mocha
+  - jasmine
+    - 昔は他の test だと問題があって jasmine を使っていた気がする
+  - jest
+    - 最近では jest らしいので採用
+    - <https://jestjs.io/ja/>
+- 統合テスト、E2E テスト
+  - spectron
+    - <https://github.com/electron-userland/spectron>
+      > Easily test your Electron apps using ChromeDriver and WebdriverIO.
+
+## jest の導入
+
+- <https://jestjs.io/ja/docs/getting-started>
+
+  - install
+    > npm install --save-dev jest
+  - `package.json`
+
+    ```json
+    "scripts": {
+      "test": "jest"
+    }
+    ```
+
+  - jest の設定
+
+    > jest --init
+
+    ```text
+    √ Would you like to use Jest when running "test" script in "package.json"? ... yes
+    √ Would you like to use Typescript for the configuration file? ... yes
+    √ Choose the test environment that will be used for testing » jsdom (browser-like)
+    √ Do you want Jest to add coverage reports? ... yes
+    √ Which provider should be used to instrument code for coverage? » v8
+    √ Automatically clear mock calls and instances between every test? ... no
+    ```
+
+- テストの確認
+
+  - `test/foo.test.js` を作成
+  - 適当にテストを書く
+  - test の実行
+
+    ```text
+    Error: Jest: Failed to parse the TypeScript config file (path)\electron_buildsize\jest.config.ts
+      Error: Jest: 'ts-node' is required for the TypeScript configuration files. Make sure it is installed
+    Error: Cannot find module 'ts-node'
+    Require stack:
+    ```
+
+    - `npm i -D ts-node`
+    - テスト成功
+
+    ```text
+    jest-haste-map: Haste module naming collision: electron_buildsize
+      The following files share their name; please adjust your hasteImpl:
+        * <rootDir>\out\electron_buildsize-win32-x64\resources\app\package.json
+        * <rootDir>\package.json
+
+    PASS  test/foo.test.js
+      √ adds 1 + 2 to equal 3 (3 ms)
+
+    ----------|---------|----------|---------|---------|-------------------
+    File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+    ----------|---------|----------|---------|---------|-------------------
+    All files |       0 |        0 |       0 |       0 |
+    ----------|---------|----------|---------|---------|-------------------
+    Test Suites: 1 passed, 1 total
+    Tests:       1 passed, 1 total
+    Snapshots:   0 total
+    Time:        5.014 s
+    Ran all test suites.
+    ```
+
+## typscript で test ファイルを書く
+
+- `npm i -D @types/jest`
+  - typescript 用の jest 型情報のインストール
+- foo.test.ts とする。
+
+  ```text
+  FAIL  test/foo2.test.ts
+    ● Test suite failed to run
+
+      SyntaxError: (path)\multiplatform_buildsize\electron_buildsize\test\foo2.test.ts: Unexpected token, expected "," (1:14)
+
+      > 1 | function sum(a: number, b: number) {
+          |               ^
+  ```
+
+  - 型指定で syntax error が出る。
+
+- `ts-jest` の使用
+
+  - `npm i -D ts-jest`
+  - `jest.config.ts` に ts-jest の設定を追加
+
+    - <https://qiita.com/mangano-ito/items/99dedf88d972e7e631b7>
+
+    ```typescript
+    globals: {
+      "ts-jest": {
+        tsConfig: "tsconfig.json",
+      },
+    },
+    transform: {
+      "^.+\\.ts$": "ts-jest",
+    },
+    ```
+
+- test script の実行
+
+  ```text
+  PASS  test/foo.test.js
+  PASS  test/foo2.test.ts
+  ----------|---------|----------|---------|---------|-------------------
+  File      | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+  ----------|---------|----------|---------|---------|-------------------
+  All files |       0 |        0 |       0 |       0 |
+  ----------|---------|----------|---------|---------|-------------------
+
+  Test Suites: 2 passed, 2 total
+  Tests:       2 passed, 2 total
+  Snapshots:   0 total
+  Time:        7.239 s
+  Ran all test suites.
+  ```
+
+  - 成功
+
+- src ファイルを import する時に相対パスが長くなる
+
+  - <https://qiita.com/mangano-ito/items/99dedf88d972e7e631b7#import-%E3%81%AE%E3%82%A8%E3%82%A4%E3%83%AA%E3%82%A2%E3%82%B9%E3%82%92%E6%8C%87%E5%AE%9A>
+
+    > tsconfig.json
+
+    ```json
+    {
+      "compilerOptions": {
+        "baseUrl": "./src/",
+        "paths": {
+          "#/*": ["*"]
+        }
+      }
+    }
+    ```
+
+    > package.json
+
+    ```json
+    {
+      "jest": {
+        "moduleNameMapper": {
+          "^#/(.+)": "<rootDir>/src/$1"
+        }
+      }
+    }
+    ```
+
+    - これで test.ts 側の import 指定するときにどこからでも `"#/foo.ts"` などと出来る。
+
+## jest で webpack の使用
+
+- 一旦保留
+  - 理由:
+    - typescript のユニットテストならば webpack を行わなくても可能なはず
+- <https://jestjs.io/ja/docs/webpack>
+- webpack 設定
+  > JavaScript トランスパイラは Jest の transform 設定オプションで管理できます。
+- 静的アセットの管理
+
+  - `package.json`
+
+    ```json
+    "jest": {
+      "moduleNameMapper": {
+        "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>/__mocks__/fileMock.js",
+        "\\.(css|less)$": "<rootDir>/__mocks__/styleMock.js"
+      }
+    }
+    ```
+
+  - `__mocks__/styleMock.js`
+
+    ```javascript
+    module.exports = {};
+    ```
+
+  - `__mocks__/fileMock.js`
+
+    ```javascript
+    module.exports = "test-file-stub";
+    ```
+
+- CSS モジュールのモック
+  - 省略
+- ソースファイルを探索できるように Jest を設定する
+
+  - `package.json`
+
+    ```json
+    "jest": {
+      "moduleFileExtensions": ["js", "jsx"],
+      "moduleDirectories": ["node_modules", "bower_components", "shared"],
+    ```
+
+    > webpack の modulesDirectories、そして extensions オプションは Jest の moduleDirectories や moduleFileExtensions と直接的な類似性があります。
+
+    ```json
+    "jest": {
+      "modulePaths": ["/shared/vendor/modules"],
+    ```
+
+    > Similarly, webpack's resolve.root option functions like setting the NODE_PATH env variable, which you can set, or make use of the modulePaths option.

@@ -8,7 +8,7 @@
     "start": "electron-forge start",
     "build_webpack_production": "webpack --mode production",
     "build_webpack_development": "webpack --mode development",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
     "package": "electron-forge package",
     "make": "electron-forge make"
   },
@@ -22,6 +22,7 @@
     "@electron-forge/maker-rpm": "^6.0.0-beta.57",
     "@electron-forge/maker-squirrel": "^6.0.0-beta.57",
     "@electron-forge/maker-zip": "^6.0.0-beta.57",
+    "@types/jest": "^26.0.23",
     "@types/node": "^14.17.4",
     "@typescript-eslint/eslint-plugin": "^4.28.1",
     "@typescript-eslint/parser": "^4.28.1",
@@ -29,13 +30,14 @@
     "eslint": "^7.29.0",
     "eslint-config-google": "^0.14.0",
     "eslint-config-prettier": "^8.3.0",
+    "jest": "^27.0.6",
     "prettier": "^2.3.2",
+    "spectron": "^15.0.0",
+    "ts-jest": "^27.0.3",
+    "ts-node": "^10.0.0",
     "typescript": "^4.3.5",
     "webpack": "^5.42.0",
     "webpack-cli": "^4.7.2"
-  },
-  "resolutions": {
-    "trim-newlines": "^4.0.0"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.0"
