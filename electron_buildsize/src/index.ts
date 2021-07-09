@@ -15,12 +15,14 @@ function createWindow() {
     height: 320,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
+      //nodeIntegration: true, // process.env.NODE_ENV === "test",
     },
   });
 
   win.loadFile(startPageHtml);
 
-  win.webContents.openDevTools();
+  // デバッグ用chrome developer tool
+  // win.webContents.openDevTools();
 }
 
 // 準備ができたらウィンドウ生成

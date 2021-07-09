@@ -413,11 +413,11 @@
 
 - Loader
   > ts-loader uses tsc, the TypeScript compiler, and relies on your tsconfig.json configuration. Make sure to avoid setting module to "CommonJS", or webpack won't be able to tree-shake your code.
-  - tsconfig.json で `CommonJS` に「しない」。
+  - ~~tsconfig.json で `CommonJS` に「しない」。~~
 
 ## webpack で、開発とリリースの設定を切り替える
 
-- https://webpack.js.org/configuration/configuration-types/#exporting-multiple-configurations
+- <https://webpack.js.org/configuration/configuration-types/#exporting-multiple-configurations>
 
   - module.exports で function を返す
 
@@ -502,9 +502,29 @@ Uncaught EvalError: Refused to evaluate a string as JavaScript because 'unsafe-e
     > webpack でトランスパイルしたファイルにソースマップを埋め込むために eval が使われているのでこのエラーが出る。
   - sourcemap を無効にすれば出ない？
   - devtool: <https://webpack.js.org/configuration/devtool/>
-    - (none) or false : 生成されないので発生しない？ -> 発生しない。
+    - false : 生成されないので発生しない？ -> 発生しない。
     - eval : 当然 eval が使われるのでダメ
     - inline-xxx : inline で展開するなら eval が使われないので OK?
+  - https://golang.hateblo.jp/entry/webpack-devtool-source-map
+    > webpack devtool ソースマップ
+    > eval が使われるもの
+    > (none) devtool の項目を設定しない - (Production)
+    > eval - (Development)
+    > cheap-eval-source-map - (Development)
+    > cheap-module-eval-source-map - (Development)
+    > eval-source-map - (Development)
+    > ファイル( .js.map )が生成されるのも
+    > cheap-source-map - (Production / Special cases)
+    > cheap-module-source-map - (Production / Special cases)
+    > source-map - (Production)
+    > nosources-source-map - (Production)
+    > hidden-source-map - (Production)
+    > 以下は全部、最後の行にコメントで JSON を base64 にしたものが追記される
+    > inline-source-map - (Special cases)
+    > inline-cheap-source-map - (Special cases)
+    > inline-cheap-module-source-map - (Special cases)
+    > ソースマップ無し
+    > false
 
 ## renderer.ts の使用
 
@@ -891,3 +911,271 @@ Uncaught EvalError: Refused to evaluate a string as JavaScript because 'unsafe-e
     ```
 
     > Similarly, webpack's resolve.root option functions like setting the NODE_PATH env variable, which you can set, or make use of the modulePaths option.
+
+## spectron の導入
+
+- <https://github.com/electron-userland/spectron>
+- インストール
+  > npm install --save-dev spectron
+- spectron の使用
+  - test コード中で使用する
+    > const Application = require('spectron').Application
+    - Application が any 型になる
+- spectron/Application の import
+  - `import { Application } from "spectron";`
+    - `"spectron"` が見つからない
+    - `tsconfig.json` `"moduleResolution": "node",` を追加
+  - これで Application 型が認識される。入力補完も効く。
+- electron の実行ファイルへのパスを取得
+  - `node_modules/electron/index.js` の export.module に出力されている。
+  - typescript からコレを取得する
+  - `const electronPath = require("electron/index.js");`
+  - import でのやり方がわからない。
+- electron の実行
+
+  - `new Application()` で electron のアプリケーションを生成
+    - `path`: electronPath (必須)
+    - `args`: 読み込むスクリプト？
+
+  ```typescript
+  app = new Application({
+    path: electronPath,
+    // args は、package.json のパスと、main process/preload process/renderer process のスクリプトがあるパスを指定する
+    args: [path.join(__dirname, "../"), path.join(__dirname, "../js/")],
+  });
+  ```
+
+  - `app.start();` で実行
+
+- electron の終了
+
+  - `app.client.closeWindow();` で終了
+  - `app.stop();`
+
+    - 特定の条件で例外が出る。
+
+      - 複数の test
+      - `afterEach()` で `return app.stop();`
+      - 二度目以降の test の afterEach の後に例外
+
+      ```text
+      RequestError: read ECONNRESET
+
+       at ClientRequest.<anonymous> (node_modules/webdriver/node_modules/got/dist/source/core/index.js:956:111)
+       at ClientRequest.origin.emit (node_modules/webdriver/node_modules/@szmarczak/http-timer/dist/source/index.js:39:20)
+
+       (node:12352) UnhandledPromiseRejectionWarning: RequestError: read ECONNRESET
+       (Use `node --trace-warnings ...` to show where the warning was created)
+       (node:12352) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 2)
+       (node:12352) [DEP0018] DeprecationWarning: Unhandled promise rejections are deprecated. In the future, promise rejections that are not handled will terminate the Node.js process with a non-zero exit code.
+      ```
+
+    - 解決方法は `app.client.closeWindow`
+
+- `app?.client.getWindowCount()` の値
+  - `win.webContents.openDevTools();` が実行されている場合は +1 される
+- 非同期テスト
+
+  - Promise 型を返す場合
+
+    ```typescript
+    test("promise test", () => {
+      return app?.client.getWindowCount().then(count=>{
+        // ...
+      }).catch(e:Error){
+        // ...
+        Promise.reject(e);
+      };
+    });
+    ```
+
+  - async await を使う場合
+
+    ```typescript
+    test("async await", async () => {
+      let count = await app?.client.getWindowContent();
+    });
+    ```
+
+  - done を使う場合
+
+    ```typescript
+    test("done", (done) => {
+      foo_callback(() => {
+        done();
+      });
+    });
+    ```
+
+  - それぞれ混ぜてはいけない。
+
+- `app.client.xxx()` のメソッドを実行すると例外を出す
+
+```text
+TypeError: waitUntilWindowLoaded Cannot read property 'isLoading' of undefined
+
+  58 |     // nodeIntegration: true の場合は動作する？
+  59 |     // https://qiita.com/nomuyoshi/items/9091abd9dc3b05c85f44
+> 60 |     return app?.client.waitUntilWindowLoaded();
+     |                        ^
+  61 |     // return app?.client.waitUntilWindowLoaded().catch((e: Error) => {
+  62 |     //   console.log(e.message);
+  63 |     //   expect(e.message).toMatch(
+
+  at Browser.<anonymous> (node_modules/spectron/lib/application.js:261:33)
+  at Timer._tick (node_modules/webdriverio/build/utils/Timer.js:58:29)
+  at Timer._start (node_modules/webdriverio/build/utils/Timer.js:30:18)
+  at new Timer (node_modules/webdriverio/build/utils/Timer.js:23:14)
+  at Browser.waitUntil (node_modules/webdriverio/build/commands/browser/waitUntil.js:18:17)
+  at Browser.wrapCommandFn (node_modules/@wdio/utils/build/shim.js:63:38)
+  at Browser.<anonymous> (node_modules/spectron/lib/application.js:260:8)
+  at Browser.waitUntilWindowLoaded (node_modules/@wdio/utils/build/shim.js:63:38)
+  at Browser.next [as waitUntilWindowLoaded] (node_modules/@wdio/utils/build/monad.js:95:33)
+  at Object.<anonymous> (test/spectron.test.ts:60:24)
+```
+
+- <https://github.com/electron-userland/spectron#node-integration>
+
+  > The Electron helpers provided by Spectron require accessing the core Electron APIs in the renderer processes of your application. So, either your Electron application has nodeIntegration set to true or you'll need to expose a require window global to Spectron so it can access the core Electron APIs.
+
+  - google 翻訳
+
+    > Spectron が提供する Electron ヘルパーでは、アプリケーションのレンダラープロセスでコア ElectronAPI にアクセスする必要があります。 したがって、Electron アプリケーションで nodeIntegration が true に設定されているか、コアの Electron API にアクセスできるように、require ウィンドウを Spectron にグローバルに公開する必要があります。
+
+## electronAPI を spectron test で使用する方法
+
+- nodeIntegration を true にする方法
+
+  - main process の ts ファイルに `webPreferences.nodeIntegration` を true にする
+
+    ```typescript
+    const win = new BrowserWindow({
+      webPreferences: {
+        nodeIntegration: true,
+    ```
+
+    - これでも正しく動作しない。失敗。
+
+- require window を spectron に公開する方法 (注: 正しく動作しない)
+
+  - preload に window.electronRequire を指定する
+
+  ```typescript
+  // preload.ts
+  if (process.env.NODE_ENV === "test") {
+    window.electronRequire = require;
+  }
+  ```
+
+  - spectron の Application で requireName を指定する
+
+  ```typescript
+  Application({
+    requireName: "electronRequire",
+  });
+  ```
+
+  - テスト時に環境変数 NODE_ENV=test を指定する
+
+  ```json
+  // package.json
+  "scripts":{
+    "test": "NODE_ENV=test jest",
+  }
+  ```
+
+  - windows と linux,mac では環境変数の指定が異なる
+  - cross-env パッケージを使用する
+
+    - `npm i -D cross-env`
+    - `"test": "cross-env NODE_ENV=test jest",`
+
+  - テストを実行する
+    - 問題が全く修正されない。失敗。
+
+## spectron で一部のメソッドを使うと TypeError: xxxx Cannot read property 'xxxx' of undefined (未解決)
+
+- test.ts ファイルで app?.client.waitUntilWindowLoaded(); を動作させる方法がわからない。
+
+  - <https://kokufu.blogspot.com/2019/10/electron-spectron.html>
+    - nodeIntegration だと動作すると言っているが、動作しない。
+  - <https://github.com/electron-userland/spectron/issues/174>
+  - <https://github.com/electron-userland/spectron/issues/844>
+    - 公式 github 上でも動作しないと主張している
+    - 昔から直ったり動作しなかったりしている？
+
+- app.client.xxx() の一部のメソッドだけが正しく動作しない可能性
+  - app.client.execute() や app.client.isElementDisplayed() は動作する。
+  - electron or spectron の使用方法が間違っているのか、electron or spectron の実装側が間違っているのか、両方なのかよくわからない。
+- 現状の回避策として、require window を spectron に公開しないで(nodeIntegration:false, electronRequire などを無効)実行出来るテストを中心に行う。
+
+## webpack で typescript 構文エラー
+
+- `function repText(selector: any, text: any) {` の `:any` 部分でエラー
+- typescript として扱われていない
+- `npm i -D ts-loader`
+- webpack.config.js に ts を ts-loader で処理するように修正
+
+  ```javascript
+  module: {
+    rules: [{ test: /\.ts$/, use: "ts-loader" }],
+  },
+  ```
+
+- electron の実行でエラー
+
+  ```text
+  App threw an error during load
+  Error: Cannot find module 'electron'
+  ```
+
+  - `webpack.config.js` で electron モジュールを使用する process に `target: "electron-main",` を追加する
+    - renderer process では、使用できない。
+
+## production にデバッグ用コードを出力しない
+
+- <https://blog.hinaloe.net/2017/07/31/webpack-statc-analysis-bundle/>
+- webpack で terser-webpack-plugin を使う
+
+  - <https://webpack.js.org/plugins/terser-webpack-plugin/>
+  - `npm i -D terser-webpack-plugin`
+  - `webpack.config.js`
+
+    - `terser` の設定
+
+      ```javascript
+      const TerserPlugin = require("terser-webpack-plugin");
+
+      module.exports = {
+        optimization: {
+          minimize: true,
+          minimizer: [
+            new TerserPlugin({
+              format: {
+                comments: false,
+              },
+            }),
+          ],
+        },
+      };
+      ```
+
+    - ソースマップの設定 `devtool: "source-map"`
+      > Works only with source-map, inline-source-map, hidden-source-map and nosources-source-map values for the devtool option.
+      - source-map
+      - inline-source-map
+      - hidden-source-map
+      - nosources-source-map
+
+  - development の時のみコード化される部分
+
+    ```typescript
+    if (process.env.NODE_ENV !== "production") {
+      // ... この部分は development の時のみコード化される
+    }
+    ```
+
+## spectron で任意のページ (html) を表示させる
+
+- spectron で production には無いテスト用の html を表示させる
+- 特定の機能だけ確認したい場合には テスト用の html ファイルを表示させたほうが効率が良い。
